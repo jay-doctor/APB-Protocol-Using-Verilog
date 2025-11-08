@@ -1,142 +1,84 @@
 # APB Protocol Implementation and Testbench
 
 ## Overview
-This project implements an Advanced Peripheral Bus (APB) protocol system, including an APB master, two APB slaves, and a top module integrating them. The system is designed according to the AMBA APB specification, supporting read and write operations with error handling and slave selection based on address decoding. A comprehensive testbench is provided to validate the system's functionality through various test cases.
+This project implements a complete Advanced Peripheral Bus (APB) protocol system designed according to the AMBA APB specification. The system includes an APB master controller, two APB slave devices with internal memory, and a top-level integration module. A comprehensive testbench verifies the functionality through various test cases including read/write operations, address decoding, error handling, and system reset behavior.
 
-The design is written in Verilog and includes a testbench to simulate and verify the APB protocol operations, such as basic read/write, address decoding, wait states, error handling, burst transfers, and randomized transactions.
+The design is written in Verilog and demonstrates practical implementation of bus protocol concepts with proper finite state machine control, slave selection, and error handling mechanisms.
 
-## Files
-- `APB_master.v`: Implements the APB master module, responsible for initiating read and write transactions, controlling the bus, and handling slave responses.
-- `APB_slave.v`: Implements the APB slave module, which responds to read and write requests, manages a 256-byte memory, and generates error signals for invalid addresses.
-- `APB_top.v`: Integrates the APB master with two APB slaves, connecting them via the necessary signals and handling slave selection.
-- `APB_tb.v`: A testbench that verifies the functionality of the APB system through a series of test cases, including basic operations, error handling, and stress testing.
+## Project Structure
 
-## Signal Descriptions
+### Core Modules
+- **APB Master** (`APB_master.v`) - Bus controller with FSM-based transaction management
+- **APB Slave** (`APB_slave.v`) - Peripheral device with 256-byte memory and error handling
+- **APB Top** (`APB_top.v`) - System integration connecting master and slaves
+- **Testbench** (`APB_tb.v`) - Comprehensive verification environment
 
-### APB Master Signals
-| Signal Name | Type | Width | Description |
-|-------------|------|-------|-------------|
-| presetn | Input | 1 | Active-low reset signal |
-| pclk | Input | 1 | Clock signal (100 MHz in testbench) |
-| transfer | Input | 1 | Initiates a transaction |
-| read | Input | 1 | Read enable signal (1 = read operation) |
-| write | Input | 1 | Write enable signal (1 = write operation) |
-| apb_write_paddr | Input | 9 | Write address for the slave |
-| apb_write_data | Input | 8 | Data to be written to the slave |
-| apb_read_paddr | Input | 9 | Read address for the slave |
-| pready | Input | 1 | Slave ready signal (1 = slave ready) |
-| pslverr | Input | 1 | Slave error signal (1 = error occurred) |
-| prdata | Input | 8 | Data from slave during read |
-| psel1 | Output | 1 | Select signal for slave 1 |
-| psel2 | Output | 1 | Select signal for slave 2 |
-| penable | Output | 1 | Enable signal for the current transfer |
-| pwrite | Output | 1 | Write signal (1 = write, 0 = read) |
-| paddr | Output | 9 | Address signal for the slave |
-| pwdata | Output | 8 | Data to the slave during write |
-| apb_read_data_out | Output | 8 | Data output from master during read |
+## Module Specifications
 
-### APB Slave Signals
-| Signal Name | Type | Width | Description |
-|-------------|------|-------|-------------|
-| pclk | Input | 1 | Clock signal |
-| presetn | Input | 1 | Active-low reset signal |
-| psel | Input | 1 | Slave select signal |
-| penable | Input | 1 | Enable signal from master |
-| pwrite | Input | 1 | Write signal (1 = write, 0 = read) |
-| paddr | Input | 8 | Address from master (lower 8 bits used) |
-| pwdata | Input | 8 | Write data from master |
-| prdata | Output | 8 | Read data to master |
-| pready | Output | 1 | Ready signal to master (1 = ready) |
-| pslverr | Output | 1 | Error signal to master (1 = error) |
+### APB Master Controller
+**File:** `APB_master.v`
 
-### APB Top Module Signals
-| Signal Name | Type | Width | Description |
-|-------------|------|-------|-------------|
-| pclk | Input | 1 | Clock signal |
-| presetn | Input | 1 | Active-low reset signal |
-| transfer | Input | 1 | Initiates a transaction |
-| read | Input | 1 | Read enable signal |
-| write | Input | 1 | Write enable signal |
-| apb_write_paddr | Input | 9 | Write address for the slave |
-| apb_write_data | Input | 8 | Data to be written to the slave |
-| apb_read_paddr | Input | 9 | Read address for the slave |
-| pslverr | Output | 1 | Slave error signal |
-| apb_read_data_out | Output | 8 | Data output during read |
+The master module implements a 3-state finite state machine:
+- **IDLE**: Wait for transaction initiation
+- **SETUP**: Configure address and control signals
+- **ENABLE**: Activate transfer with penable signal
 
-## Test Cases
+**Key Features:**
+- Supports both read and write operations
+- Automatic slave selection based on address decoding (bit 8)
+- Handles slave ready (pready) and error (pslverr) responses
+- Captures read data on successful transaction completion
 
-The testbench (`APB_tb.v`) includes the following test cases to verify the functionality of the APB system:
+**Interface Signals:**
+- **Control Inputs**: `presetn`, `pclk`, `transfer`, `read`, `write`
+- **Address/Data Inputs**: `apb_write_paddr[8:0]`, `apb_write_data[7:0]`, `apb_read_paddr[8:0]`
+- **Slave Response**: `pready`, `pslverr`, `prdata[7:0]`
+- **APB Bus Outputs**: `psel1`, `psel2`, `penable`, `pwrite`, `paddr[8:0]`, `pwdata[7:0]`
+- **Data Output**: `apb_read_data_out[7:0]`
 
-### Basic Write Operation (TC1)
-- **Description**: Tests a write transaction with no wait states.
-- **Inputs**: `transfer = 1`, `write = 1`, `read = 0`, valid `apb_write_paddr`, valid `apb_write_data`.
-- **Expected Output**: Slave receives correct address and data, `pready` is asserted after one clock cycle, and data is written to the correct memory location.
-- **Test**: Writes data `8'hAA` to address `9'h005`.
+### APB Slave Device
+**File:** `APB_slave.v`
 
-### Basic Read Operation (TC2)
-- **Description**: Tests a read transaction with no wait states.
-- **Inputs**: `transfer = 1`, `write = 0`, `read = 1`, valid `apb_read_paddr`.
-- **Expected Output**: Slave returns correct data via `prdata`, `apb_read_data_out` contains expected data, `pready` is asserted after one clock cycle.
-- **Test**: Reads data from address `9'h005`.
+Each slave contains a 256-byte memory array and implements the APB slave interface protocol.
 
-### Address Decoding (Slave Selection) (TC3)
-- **Description**: Validates that the master correctly selects the appropriate slave based on the address range.
-- **Inputs**: Test addresses for Slave 1 (`9'h005`, `psel1 = 1`, `psel2 = 0`) and Slave 2 (`9'h085`, `psel1 = 0`, `psel2 = 1`).
-- **Expected Output**: Only the correct slave is selected, and the other remains idle.
-- **Test**: Writes `8'hA5` to `9'h005` (Slave 1) and `8'h5A` to `9'h085` (Slave 2).
+**Key Features:**
+- 256-byte addressable memory space
+- Error generation for out-of-range addresses (paddr > 8'd255)
+- Synchronous operation with ready signal generation
+- Support for both read and write operations
 
-### Write with Wait States (TC4)
-- **Description**: Tests a write transaction where the slave introduces wait states.
-- **Inputs**: Slave delays asserting `pready`.
-- **Expected Output**: Master remains in the ENABLE state until `pready` is asserted, and data is written only when the transfer completes.
-- **Test**: Writes `8'hBB` to `9'h010` with a simulated wait state.
+**Interface Signals:**
+- **APB Inputs**: `pclk`, `presetn`, `psel`, `penable`, `pwrite`, `paddr[7:0]`, `pwdata[7:0]`
+- **APB Outputs**: `prdata[7:0]`, `pready`, `pslverr`
 
-### Read with Wait States (TC5)
-- **Description**: Tests a read transaction where the slave introduces wait states.
-- **Inputs**: Slave delays asserting `pready`.
-- **Expected Output**: Master remains in the ENABLE state until `pready` is asserted, and correct data is captured when the transfer completes.
-- **Test**: Reads from `9'h010` with a simulated wait state.
+### Top-Level Integration
+**File:** `APB_top.v`
 
-### Error Handling (PSLVERR) (TC6)
-- **Description**: Tests error conditions during a write operation with an invalid address.
-- **Inputs**: Invalid address (`9'h1FF`), `write = 1`, `read = 0`.
-- **Expected Output**: Slave asserts `pslverr`, and the master captures the error condition.
-- **Test**: Attempts to write `8'hFF` to `9'h1FF`.
+Integrates one master and two slaves with proper signal routing and slave selection logic.
 
-### Burst of Transfers (TC7)
-- **Description**: Tests multiple back-to-back read and write transfers.
-- **Inputs**: Alternate read and write transactions without returning to IDLE.
-- **Expected Output**: Master and slaves handle consecutive transfers correctly, with proper `psel` and `penable` transitions.
-- **Test**: Performs write and read operations on addresses `9'h001`, `9'h002`, and `9'h003`.
+**Address Mapping:**
+- **Slave 1**: Address range 0x000-0x0FF (paddr[8] = 0)
+- **Slave 2**: Address range 0x100-0x1FF (paddr[8] = 1)
 
-### Out-of-Range Address (TC8)
-- **Description**: Tests system behavior with an address outside the valid range of the slaves.
-- **Inputs**: Invalid address (`9'h1FF`).
-- **Expected Output**: Slave asserts `pslverr`, and the master detects the error.
-- **Test**: Attempts to write `8'hFF` to `9'h1FF`.
+## Testbench Verification
+**File:** `APB_tb.v`
 
-### Reset Behavior (TC9)
-- **Description**: Tests the reset functionality of the system.
-- **Inputs**: Assert `presetn` (active-low reset).
-- **Expected Output**: All signals return to their default states, and no transfers occur during reset.
-- **Test**: Applies reset for 20 ns and verifies default states.
+The testbench implements a comprehensive verification suite with the following test cases:
 
-### Randomized Transactions (TC10)
-- **Description**: Stress-tests the system with randomized read and write operations.
-- **Inputs**: Randomly generated `read`, `write`, `apb_write_paddr`, `apb_read_paddr`, and `apb_write_data`.
-- **Expected Output**: System remains stable and handles transactions correctly.
-- **Test**: Executes 20 randomized read and write transactions.
+### Test Cases
+1. **Basic Write Operation** - Write data to valid address
+2. **Basic Read Operation** - Read data from previously written location
+3. **Slave Selection** - Verify address decoding selects correct slave
+4. **Multiple Operations** - Sequential read/write operations
+5. **Error Handling** - Write to invalid address triggers pslverr
+6. **Reset Behavior** - System recovery after reset assertion
 
-## Usage
-
-### Simulation Environment
-Use a Verilog simulator (e.g., ModelSim, Vivado, or QuestaSim) to compile and simulate the design.
-
-### Compilation
-Compile the Verilog files in the following order:
-```bash
-APB_master.v
-APB_slave.v
+### Test Methodology
+- Clock generation with 10ns period (100MHz)
+- Systematic task-based testing approach
+- Reset sequence verification
+- Error condition testing
+- Multi-slave address space validation
+APB_master.v  
 APB_top.v
 APB_tb.v
-run.do
